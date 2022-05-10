@@ -28,23 +28,11 @@ dt<- readRDS(file = file.path(data_source,"DL_data.RDS")) %>%
 
 # image scraper -----------------------------------------------------------
 
-##test
-
-test_data<- dt %>%
-  select(status_id,media_url) %>% 
-  slice_sample(n =5)
-
-download.file(url = test_data[1,2],destfile = paste0(data_dest,"/test_image.jpeg"),mode = "wb")
-
-
-
-# full scraping -----------------------------------------------------------
-
-for (i in 1:nrow(dt)) {
-  img_url<- dt[i,"media_url"]
+try(exp = {for (i in 1:nrow(dt)) {
+  img_url<- pull(dt[i,"media_url"])
   img_ext<- tail(unlist(str_split(string = dt[i,"media_url"],pattern = "\\.",simplify = F)),n=1)
   img_name<- paste0(dt[i,"screen_name"],"-",dt[i,"status_id"],".",img_ext)
   img_path<- paste(data_dest,img_name,sep = "/")
   download.file(url = img_url,destfile = img_path,mode = "wb")
  
-}
+}},silent = T)
