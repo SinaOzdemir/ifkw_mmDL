@@ -30,17 +30,19 @@ p_load(char = packs)
 test_data<- list.files(path = here("Data","tesseract_test_data"),pattern = "*.jpg",full.names = T)
 img_names<- list.files(path = here("Data","tesseract_test_data"),pattern = "*.jpg",full.names = F)
 
-##text data
 
+# tests -------------------------------------------------------------------
 
-
+## text extraction test
 
 english<- tesseract("eng")
 
 test_results<- ocr_data(image = test_data[1],
                    engine = english) %>% 
   filter(confidence >80) %>% 
-  mutate(image_path = img_names[1])
+  mutate(image_path = img_names[1]) %>% 
+  group_by(image_path) %>% 
+  summarise(text = paste0(word,collapse = " "))
 
 
 results <- tibble()
