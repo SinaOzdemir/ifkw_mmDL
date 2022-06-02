@@ -1,11 +1,40 @@
-## tesseract test
-install.packages("tesseract")
+########################################
+#Title: Text extraction from images    #
+#Author: Sina Özdemir                  #
+#        PhD candidate                 #
+#        sina.ozdemir@ntnu.no          #
+#        Dep. of Socio. and PoliSci    #
+#        NTNU                          #
+########################################
 
-library(tesseract)
-library(here)
-library(tidyverse)
+
+
+
+# setup -------------------------------------------------------------------
+if (isFALSE(require(pacman))){
+  install.packages("pacman")
+  library(pacman)
+}else{
+  library(pacman)
+}
+
+packs<- c("tidyverse","here","tesseract","magick")  
+  
+p_load(char = packs)
+
+
+# data --------------------------------------------------------------------
+
+##image data
+
 test_data<- list.files(path = here("Data","tesseract_test_data"),pattern = "*.jpg",full.names = T)
 img_names<- list.files(path = here("Data","tesseract_test_data"),pattern = "*.jpg",full.names = F)
+
+##text data
+
+
+
+
 english<- tesseract("eng")
 
 test_results<- ocr_data(image = test_data[1],
@@ -13,7 +42,9 @@ test_results<- ocr_data(image = test_data[1],
   filter(confidence >80) %>% 
   mutate(image_path = img_names[1])
 
+
 results <- tibble()
+
 for (i in 1:length(test_data)) {
   img_text<- ocr_data(image = test_data[i],
                       engine = english) %>% 
