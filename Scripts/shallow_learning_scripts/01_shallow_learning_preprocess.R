@@ -70,22 +70,32 @@ write.table(x = label_balance,file = here("Data","shallow_learning_data","label_
 # corpus ------------------------------------------------------------------
 
 text_corpus<- text_data %>% 
+  mutate(feature_texts = str_replace_all(string = feature_texts,pattern = "ı",replacement = "i")) %>% 
   corpus(.,
          docid_field = "doc_id",
          text_field = "feature_texts")
 
 
 text_tokens<- text_corpus %>% 
-  tokens(remove_punct = T,remove_url = T) %>% #remove punctuations and links
+  tokens(remove_punct = T,
+         remove_url = T,
+         remove_symbols = T,
+         remove_numbers = T) %>% #remove punctuations and links
   tokens_select(pattern = "#",selection = "remove",valuetype = "fixed") %>% #remove hashtags to simplfy
   tokens_select(pattern = "@",selection = "remove",valuetype = "fixed") %>% #remove mention symbols
-  tokens_select(pattern = stopwords(language = "en",source = "snowball"),selection = "remove",valuetype = "fixed") %>% #remove stop words
+  tokens_select(pattern = stopwords(language = "en",source = "snowball"),
+                selection = "remove",
+                valuetype = "fixed") %>%#remove stop words
+  tokens_select(pattern = "na|i|it",selection = "remove",valuetype = "regex") %>% #remove frequent noises
   tokens_wordstem(language = "en") %>% #stem words
   tokens_tolower() #decapitalize everything
   
 
 text_dfm<- text_tokens %>% 
   dfm() #basic document feature matrix with one-hot-encoding
+
+#feature size reduced increadibly(from 6k to 2.9k)
+
 
 feature_frequency<- textstat_frequency(x = text_dfm)  
 
@@ -95,7 +105,20 @@ feature_frequency_max<- feature_frequency %>%
   geom_point()+
   theme_bw()+
   coord_flip()
+
+
+text_dfm_df<- text_dfm %>% convert(to = "data.frame")
+
+noise<- colnames(text_dfm)[which(nchar(colnames(text_dfm))<2)]
+
+text_dfm_df<- text_dfm_df %>% 
+  select(-all_of(x = noise))
+
+saveRDS(object = text_dfm_df,file = here("Data","shallow_learning_data","hot_encoding_dfm.rds"))
+
 # there are high frequency noises such as single digits, "na", signs "€" and single letters "ı","ıt" etc.
+#this means that emoji cleaning and other stuff didn't exactly work as I hoped.
+# should remove single length chars() from feautes too.
     
 text_tfidf<- text_tokens%>% 
   dfm() %>% 
