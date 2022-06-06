@@ -74,13 +74,14 @@ trimmed_image %>% image_negate()#negation reverses the color order might be usef
 # text detection can be further improved by applying convolve kernels but there seems to a lot of different approaches to edge detection.
 # So it would take some trial and error to find the optimum kernel since we have wide variety of them 
 
-#based on these experiments here is the suggested preprocessing for images
-
 ocr_image <- test_img %>% 
   image_resize(geometry = "1000x") %>% 
   image_convert(type = "bilevel") %>% 
   image_reducenoise() %>% 
   image_negate()
+
+
+#based on these experiments here is the suggested preprocessing for images
 
 ocr_image_a <- test_img %>% 
   image_resize(geometry = "1000x") %>% 
@@ -117,6 +118,100 @@ stringdist::stringdist(a = original_text,b = pp_image_ocr_a$text, method = "lv")
 
 
 
-# Implementation ----------------------------------------------------------
+# function test ----------------------------------------------------------
 
-images_list
+text_extractor<- function(image_path,preprocess = c(T,F),postprocess = c(T,F),text_confidence = numeric(0),OCR_language = c("eng","osd")){
+  
+  #make sure the user has necessary dependencies
+  p_loader<- require(pacman)
+  
+  if(isFALSE(p_loader)){
+    install.packages("pacman")
+  }else{
+    library(pacman)
+  }
+  
+  packs<- c("tidyverse","tesseract","magick")
+  
+  p_load(char = packs, install = T)
+  
+  eng = tesseract(language = OCR_language)
+  
+  image = image_read(path = image_path)
+  img_name = tail(unlist(str_split(string = image_path,pattern = "/")),n = 1)
+  
+  if(isTRUE(preprocess)){
+    message("preprocessing the image")
+    image = image %>% 
+      image_resize(geometry = "1000x") %>% 
+      image_convert(type = "grayscale") %>% 
+      image_reducenoise() %>% 
+      image_negate()
+  }
+  
+  
+  message("extracting text from the image\n")
+  
+  image_text<- ocr_data(image = image,engine = eng) %>% 
+    filter(confidence >= text_confidence) %>% 
+    mutate(image_name = img_name) %>% 
+    group_by(image_name) %>% 
+    summarise(text = paste0(word,collapse = " "))
+  
+  if(isTRUE(postprocess)){
+    message("post-processing the extracted text\n")
+    post_processed_image_text<- image_text %>%
+      mutate(text = trimws(text)) %>% 
+      mutate(text = str_remove_all(string = text, pattern = "[[:symbol:]]")) %>% 
+      mutate(text = str_remove_all(string = text, pattern = "\\\\")) %>% 
+      mutate(text = str_remove_all(string = text,pattern = "[[:punct:]]")) %>% 
+      mutate(text = str_remove_all(string = text, pattern = "[^[\\da-zA-Z ]]")) %>% 
+      mutate(text = str_replace_all(string = text, pattern = "\\s+",replacement = " ")) %>% 
+      mutate(text = trimws(x = text)) %>% 
+      filter(nchar(text)>1)
+    
+    if(nrow(post_processed_image_text)>0){
+      
+      message("post-processing completed returning values\n")
+      return(post_processed_image_text)
+      
+    }else{
+      
+      message("post-processing removed all values, returning null\n")
+      return(NULL)
+      
+    }
+  }else{
+    message("post-processign was not chosen, returning raw data")
+    return(image_texts)
+  }
+  
+  
+  
+}
+#there is still some noise but works relatively fine
+function_test<- map_dfr(.x = test_data,.f = text_extractor,preprocess = T, text_confidence = 75,OCR_language = "eng",postprocess = T)
+
+## OCR returns quite noise, some post-processing is needed
+###further text cleaning for ocr
+cleaning_test<- image_texts
+
+cleaned_text<- cleaning_test %>%
+  mutate(text = trimws(text)) %>% 
+  mutate(text = str_remove_all(string = text, pattern = "[[:symbol:]]")) %>% 
+  mutate(text = str_remove_all(string = text, pattern = "\\\\")) %>% 
+  mutate(text = str_remove_all(string = text,pattern = "[[:punct:]]")) %>% 
+  mutate(text = str_remove_all(string = text, pattern = "[^[\\da-zA-Z ]]")) %>% 
+  mutate(text = str_replace_all(string = text, pattern = "\\s+",replacement = " ")) %>% 
+  mutate(text = trimws(x = text)) %>% 
+  filter(nchar(text)>1)
+
+### integrated into the function now
+
+# implementation ----------------------------------------------------------
+
+labelled_images<- list.files(path = here("Data","image_data"),pattern = "*.jpg",full.names = T)
+
+image_texts<- map_dfr(.x = labelled_images,.f = text_extractor,preprocess = T,text_confidence = 75,OCR_language = "eng",postprocess = T)
+
+saveRDS(object = image_texts,file = here("Data","shallow_learning_data","image_texts.rds"))
