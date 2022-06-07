@@ -13,7 +13,7 @@
 
 library(pacman)
 
-packs<- c("tidyverse","academictwitteR","renv","here","xlsx")
+packs<- c("tidyverse","here","xlsx")
 
 p_load(char = packs, install = T)
 
@@ -56,7 +56,7 @@ DL_data<- coded_sample %>%
   filter(!duplicated(status_id)) %>% 
   select(status_id,V101_02,screen_name,media_url.x,text,V201,V301_01:V301_06) %>% 
   rename(media_url = media_url.x) %>% 
-  mutate(across(V301_01:V301_06,~recode(.x,`2`=1,`1`=0)))
+  mutate(across(V301_01:V301_06,~recode(.x,`2`=0,`1`=1)))
 
 saveRDS(DL_data,file = here("Data","labelled_data","DL_data.RDS"))
 
