@@ -15,7 +15,8 @@ packs<- c("tidyverse","quanteda","here","fastText","qdapRegex","feather","quante
 
 p_load(char = packs,install = T)
 
-labeled_data<- readRDS(file = here("Data","labelled_data","DL_data.RDS")) %>% ungroup() %>%
+labeled_data<- readRDS(file = here("Data","labelled_data","DL_data.RDS")) %>%
+  ungroup() %>% select(status_id,screen_name,text,V301_02)
 
 image_texts<- readRDS(file = here("Data","shallow_learning_data","image_texts.rds"))
 
@@ -26,29 +27,34 @@ image_texts<- image_texts %>%
   mutate(image_id = str_remove_all(string = image_name,pattern = ".jpg")) %>% 
   mutate(status_id = str_split(string = image_id,pattern = "-",simplify = T)[,2]) %>% 
   mutate(screen_name = str_split(string = image_id,pattern = "-",simplify = T)[,1]) %>% 
-  rename(image_text = text)
+  rename(image_text = text) %>% 
+  select(-image_name,-image_id)
 
 sl_data<- left_join(labeled_data,image_texts,by = c("status_id","screen_name"))
 
 sl_data_text<- sl_data %>% 
-  group_by(status_id,screen_name) %>% 
-  summarise(feature_texts = paste(text,image_text,collapse = "."))
-
-sl_data_b<- left_join(sl_data,sl_data_text, by = c("screen_name","status_id")) %>% 
-  select(screen_name,status_id,feature_texts, matches(match = "V301_*"))
+  rowwise() %>% 
+  mutate(feature_texts = paste0(text,". ",image_text)) %>% 
+  select(-text,-image_text)
 
 
 # create_doc_id -----------------------------------------------------------
 
-text_data <- sl_data_b %>% 
-  select(status_id,screen_name,feature_texts,matches(match = "V301_*")) %>% #select variables for analysis
+text_data <- sl_data_text %>% 
   mutate(doc_id = paste0(screen_name,"-",status_id)) %>% #create unique document ids
   select(-status_id,-screen_name) %>% #drop unnecessary variables now
+  mutate(feature_texts = str_replace_all(string = feature_texts,pattern = "ı",replacement = "i")) %>% #
   mutate(feature_texts = str_remove_all(string = feature_texts,pattern = "\n")) %>% #remove line breaks from tweets
   mutate(feature_texts = str_remove_all(string = feature_texts,pattern = "\\p{So}|\\p{Cn}|\U0001f3fb|\U0001f3fc")) %>% #remove emojis from tweets
   mutate(feature_texts = qdapRegex::rm_twitter_url(text.var = feature_texts)) %>%  #remove urls from tweets
-  mutate(feature_texts = str_remove_all(string = feature_texts,pattern = " &amp|:-&gt;|#|@")) %>% #remove unrecognized characters, mentions and hashtags for language recognition
+  mutate(feature_texts = str_remove_all(string = feature_texts,pattern = " &amp|&amp;|:-&gt;|#|@")) %>% #remove unrecognized characters, mentions and hashtags for language recognition
+  mutate(feature_texts = str_remove_all(string = feature_texts, pattern = "[\U{1F1E6}-\U{1F1FF}-\U{1F300}-\U{1F64F}]|[\U{1F300}-\U{1F5FF}]|[\U{1F900}-\U{1F9FF}]|[\U{2700}-\U{27BF}]|[\U{1F100}-\U{1F1FF}]|[\U{2600}-\U{26FF}-\U{2935}]")) %>% 
+  mutate(feature_texts = stringi::stri_trans_general(str = feature_texts,"latin-ascii")) %>% #should remove grapheme cluster character (non-latin letters)
+  mutate(feature_texts = stringi::stri_trans_nfkc(str = feature_texts)) %>% #normalizes bold and italic characters created with unicode
+  mutate(feature_texts = str_replace_all(string = feature_texts,pattern = ":",replacement = ".")) %>% 
+  mutate(feature_texts = str_replace_all(string = feature_texts, pattern = "\\.", replacement = ". ")) %>% 
   drop_na()
+
 
 text<- text_data %>% pull(feature_texts)
 
@@ -58,19 +64,14 @@ text_data$text_lang<- fastText::language_identification(input_obj = text,
 
 text_data<- text_data %>% filter(text_lang == "en") #keep only the english language tweets
 
-label_balance<- text_data %>% 
-  select(matches("V301_*")) %>% 
-  pivot_longer(cols = everything(),names_to = "labels",values_to = "presence") %>% 
-  group_by(labels,presence) %>% 
-  summarise(label_count = n()) %>% 
-  pivot_wider(names_from = "presence",values_from = "label_count")
+label_balance<-as.data.frame(table(text_data$V301_02)) %>% rename(V301_02 = Var1)
 
-write.table(x = label_balance,file = here("Data","shallow_learning_data","label_shares.csv"),sep = ";",quote = T,row.names = F,col.names = T,fileEncoding = "UTF-8")
+write.table(x = label_balance,file = here("Data","shallow_learning_data","label_balance.csv"),sep = ";",row.names = F,col.names = T,fileEncoding = "UTF-8")
 
 # corpus ------------------------------------------------------------------
+##HERE##
 
 text_corpus<- text_data %>% 
-  mutate(feature_texts = str_replace_all(string = feature_texts,pattern = "ı",replacement = "i")) %>% 
   corpus(.,
          docid_field = "doc_id",
          text_field = "feature_texts")
@@ -86,16 +87,14 @@ text_tokens<- text_corpus %>%
   tokens_select(pattern = stopwords(language = "en",source = "snowball"),
                 selection = "remove",
                 valuetype = "fixed") %>%#remove stop words
+  tokens_select(pattern = "\\<U+",selection = "remove",valuetype = "regex") %>% 
   tokens_select(pattern = "na|i|it",selection = "remove",valuetype = "regex") %>% #remove frequent noises
+  #tokens_select(pattern = "\\X",selection = "remove",valuetype = "regex") %>% 
   tokens_wordstem(language = "en") %>% #stem words
   tokens_tolower() #decapitalize everything
-  
 
 text_dfm<- text_tokens %>% 
-  dfm() #basic document feature matrix with one-hot-encoding
-
-#feature size reduced increadibly(from 6k to 2.9k)
-
+  dfm() #basic document feature matrix with hot encoding
 
 feature_frequency<- textstat_frequency(x = text_dfm)  
 
@@ -104,29 +103,42 @@ feature_frequency_max<- feature_frequency %>%
   ggplot(aes(x = reorder(as.factor(feature),frequency),y = frequency))+
   geom_point()+
   theme_bw()+
+  labs(x = "features",y = "frequencies")+
   coord_flip()
 
+ggsave(feature_frequency_max,filename = "noise_detection.jpg",path = here("Graphs"),bg = "white")
 
-text_dfm_df<- text_dfm %>% convert(to = "data.frame")
+text_dfm_df<- text_dfm %>% convert(to = "data.frame")#here is where the weirdness starts,
 
 noise<- colnames(text_dfm)[which(nchar(colnames(text_dfm))<2)]
 
 text_dfm_df<- text_dfm_df %>% 
-  select(-all_of(x = noise))
+  select(-all_of(x = noise)) %>% 
+  column_to_rownames(var = "doc_id")
+
+features<-data.frame(feat_names = colnames(text_dfm_df))
+
+features<- features %>% 
+  mutate(feature_id = seq.int(1,nrow(features),by = 1)) %>% 
+  mutate(feature_tag = paste0("V",feature_id)) %>% 
+  select(-feature_id)
+  
+colnames(text_dfm_df)<-features$feature_tag
+
+saveRDS(features,file = here("Data","shallow_learning_data","hotencoding_feat_names.rds"))
 
 saveRDS(object = text_dfm_df,file = here("Data","shallow_learning_data","hot_encoding_dfm.rds"))
 
 # there are high frequency noises such as single digits, "na", signs "€" and single letters "ı","ıt" etc.
 #this means that emoji cleaning and other stuff didn't exactly work as I hoped.
 # should remove single length chars() from feautes too.
+
+text_tfidf<- text_dfm_df %>%
+  as.dfm() %>% 
+  dfm_tfidf(scheme_tf = "count",#weight by term frequency to push rare words up
+            scheme_df = "inverse") %>% #common inverse document frequency to push rare words further up
+  convert(to = "data.frame") %>% 
+  column_to_rownames(var = "doc_id")
     
-text_tfidf<- text_tokens%>% 
-  dfm() %>% 
-  dfm_tfidf(scheme_tf = "count", #weight by term frequency to push rare words up
-            scheme_df = "inverse") %>% #common inverse document frequency to push rare words furher up
-  convert(to = "data.frame")#remove stopwords
-
-text_dfm %>% write_feather(.,path = here("Data","shallow_learning_data","text_dfm.feather"))
-
-text_tfidf %>%write_feather(.,path = here("Data","shallow_learning_data","text_tfidf.feather"))
+text_tfidf %>%saveRDS(file = here("Data","shallow_learning_data","text_tfidf.rds"))
  
