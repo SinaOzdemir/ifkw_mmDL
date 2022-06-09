@@ -15,16 +15,9 @@ packs<- c("tidyverse","caret","here")
 
 p_load(char = packs, install = T)
 
-data<- readRDS(file = here("Data","shallow_learning_data","text_tfidf.rds")) %>% 
-  rownames_to_column(var = "doc_id") %>% 
-  filter(!(doc_id %in% c("ecb-1202992784652808192","inea_eu-1235481777197604865"))) 
-
-
-dv<- readRDS(file = here("Data","shallow_learning_data","hot_encoding_ml.rds")) %>% 
-  select(doc_id,V301_02)
-
-data<- inner_join(data,dv,by = "doc_id") %>% 
-  column_to_rownames("doc_id")
+data<- readRDS(file = here("Data","shallow_learning_data","hot_encoding_ml.rds")) %>% 
+  filter(!(doc_id %in% c("ecb-1202992784652808192","inea_eu-1235481777197604865"))) %>% 
+  column_to_rownames(var = "doc_id")
 
 data<- data %>% 
   mutate(V301_02 = as.factor(V301_02)) 
@@ -52,7 +45,7 @@ output_nb<- caret::train(y = train_y,
                          x = train_x,
                          method = "naive_bayes")
 
-saveRDS(object = output_nb,file = here("Results","v301_02__tfidf_nb.rds"))
+saveRDS(object = output_nb,file = here("Results","v301_02_nb.rds"))
 #Something is wrong; all the Accuracy metric values are missing:
 
 
@@ -62,7 +55,7 @@ output_logreg<- caret::train(y = train_y,
                          x = train_x,
                          method = "glmnet")
 
-saveRDS(object = output_logreg,file = here("Results","v301_02__tfidf_logreg.rds"))
+saveRDS(object = output_logreg,file = here("Results","v301_02_logreg.rds"))
 
 
 # Support vector machine (Least Squares Support Vector Machine with Polynomial Kernel) --------------------------------------------------
@@ -76,7 +69,7 @@ output_svmlss<- caret::train(y = train_y,
                              x = train_x,
                              method = "lssvmPoly")
 
-saveRDS(object = output_svmlss,file = here("Results","v301_02__tfidf_svmlss.rds"))
+saveRDS(object = output_svmlss,file = here("Results","v301_02_svmlss.rds"))
 
 
 # Random forest -----------------------------------------------------------
@@ -88,7 +81,7 @@ output_rf<- caret::train(y = train_y,
                              x = train_x,
                              method = "ranger")
 
-saveRDS(object = output_rf,file = here("Results","v301_02__tfidf_RF.rds"))
+saveRDS(object = output_rf,file = here("Results","v301_02_RF.rds"))
 
 
 
@@ -106,7 +99,7 @@ output_xgbdart<- caret::train(y = train_y,
                          x = train_x,
                          method = "xgbDART")
 
-saveRDS(object = output_xgbdart,file = here("Results","v301_02__tfidf_xgbd.rds"))
+saveRDS(object = output_xgbdart,file = here("Results","v301_02_xgbd.rds"))
 
 
 # Alternative XGBOOS (xgbTree) --------------------------------------------
@@ -120,5 +113,5 @@ output_xgbtree<- caret::train(y = train_y,
                               x = train_x,
                               method = "xgbTree")
 
-saveRDS(object = output_xgbdart,file = here("Results","v301_02__tfidf_xgbt.rds"))
+saveRDS(object = output_xgbdart,file = here("Results","v301_02_xgbt.rds"))
 
