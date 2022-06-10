@@ -24,12 +24,25 @@ data_dest <- here("Data","image_data")
 dt<- readRDS(file = here("Data","labelled_data","DL_data.RDS")) %>% 
   drop_na()
 
-write_feather(x = dt,path = here("Data","labelled_data","DL_data.feather"))
+
+text<- dt %>% pull(text)
+tweet_lang<-vector(mode = "character",length = length(text))
+
+for(i in 1:length(text)){
+  cat("working on tweet ",i,"\n")
+  lang_i<- fastText::language_identification(input_obj = text[i],
+                                             pre_trained_language_model_path = here("lang_recognition","lid.176.bin")) %>% 
+    filter(prob_1 == max(prob_1)) %>%
+    pull(iso_lang_1)
+  
+  tweet_lang[i]<-lang_i
+}
+
+dt$lang<-tweet_lang
+
+dt<-dt %>% filter(lang == "en")
 
 # image scraper -----------------------------------------------------------
-
-
-i=1
 
 for (i in 1:nrow(dt)) {
   img_url<- pull(dt[i,"media_url"])
