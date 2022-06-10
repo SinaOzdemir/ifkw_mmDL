@@ -15,16 +15,9 @@ packs<- c("tidyverse","caret","here")
 
 p_load(char = packs, install = T)
 
-data<- readRDS(file = here("Data","shallow_learning_data","text_tfidf.rds")) %>% 
-  rownames_to_column(var = "doc_id") %>% 
-  filter(!(doc_id %in% c("ecb-1202992784652808192","inea_eu-1235481777197604865"))) 
-
-
-dv<- readRDS(file = here("Data","shallow_learning_data","hot_encoding_ml.rds")) %>% 
-  select(doc_id,V301_02)
-
-data<- inner_join(data,dv,by = "doc_id") %>% 
-  column_to_rownames("doc_id")
+data<- readRDS(file = here::here("Data","shallow_learning_data","hot_encoding_ml.rds")) %>% 
+  filter(!(doc_id %in% c("ecb-1202992784652808192","inea_eu-1235481777197604865"))) %>% 
+  column_to_rownames(var = "doc_id")
 
 data<- data %>% 
   mutate(V301_02 = as.factor(V301_02)) 
@@ -52,9 +45,15 @@ output_nb<- caret::train(y = train_y,
                          x = train_x,
                          method = "naive_bayes")
 
-saveRDS(object = output_nb,file = here("Results","v301_02__tfidf_nb.rds"))
-#Something is wrong; all the Accuracy metric values are missing:
+saveRDS(object = output_nb,file = here("Results","v301_02_nb.rds"))
 
+nb_predict<- readRDS(here::here("Results","v301_02_nb.rds"))
+
+nb_pred_res<- predict(nb_predict,newdata = testData,type = "raw")
+
+nb_conf_mat<- confusionMatrix(data= nb_pred_res,reference=testData$V301_02, positive = "1")
+
+nb_conf_res<-nb_conf_mat$byClass
 
 # logistic regression -----------------------------------------------------
 
@@ -62,7 +61,15 @@ output_logreg<- caret::train(y = train_y,
                          x = train_x,
                          method = "glmnet")
 
-saveRDS(object = output_logreg,file = here("Results","v301_02__tfidf_logreg.rds"))
+saveRDS(object = output_logreg,file = here("Results","v301_02_logreg.rds"))
+
+lr_predict<- readRDS(here::here("Results","v301_02_logreg.rds"))
+
+lr_pred_res<- predict(lr_predict,newdata = testData,type = "raw")
+
+lr_conf_mat<- confusionMatrix(data = lr_pred_res,reference = testData$V301_02,positive = "1")
+
+lr_conf_res<- lr_conf_mat$byClass
 
 
 # Support vector machine (Least Squares Support Vector Machine with Polynomial Kernel) --------------------------------------------------
@@ -72,15 +79,26 @@ req_packs<-c("kernlab")
 
 p_load(char = req_packs,install = T)
 
-
-output_svmpoly<- caret::train(y = train_y,
-                              x = train_x,
-                              method = "svmPoly")
+levels(trainData$V301_02)<-c("No","Yes")
 
 
+output_svmpoly<- caret::train(V301_02~.,
+                              data= trainData,
+                             method = "svmPoly")
 
-saveRDS(object = output_svmpoly,file = here("Results","v301_02__tfidf_svmpoly.rds"))
 
+
+saveRDS(object = output_svmpoly,file = here("Results","v301_02_poly.rds"))
+
+output_svmpoly<- readRDS(file = here::here("Results","v301_02_poly.rds"))
+
+svmpoly_pred<- predict(object = output_svmpoly,newdata = testData,type = "raw")
+
+levels(testData$V301_02)<-c("No","Yes")
+
+svm_conf_matrix<- confusionMatrix(data = svmpoly_pred,reference = testData$V301_02,positive = "Yes")
+
+svm_conf_res<-svm_conf_matrix$byClass
 
 # Random forest -----------------------------------------------------------
 req_packs<-c("e1071", "ranger")
@@ -91,12 +109,15 @@ output_rf<- caret::train(y = train_y,
                              x = train_x,
                              method = "ranger")
 
-saveRDS(object = output_rf,file = here("Results","v301_02__tfidf_RF.rds"))
+saveRDS(object = output_rf,file = here("Results","v301_02_RF.rds"))
 
+rf_output<-readRDS(file = here::here("Results","v301_02_RF.rds"))
 
+rf_pred<- predict(object = rf_output,newdata = testData,type = "raw")
+levels(testData$V301_02)<-c("0","1")
+rf_conf_mat<- confusionMatrix(data = rf_pred,reference = testData$V301_02,positive = "1")
 
-
-
+rf_conf_res<- rf_conf_mat$byClass
 
 # XGboost(DART boosting: https://xgboost.readthedocs.io/en/stable/tutorials/dart.html) -----------------------------------------------------------------
 # 
@@ -109,8 +130,8 @@ saveRDS(object = output_rf,file = here("Results","v301_02__tfidf_RF.rds"))
 #                          x = train_x,
 #                          method = "xgbDART")
 # 
-# saveRDS(object = output_xgbdart,file = here("Results","v301_02__tfidf_xgbd.rds"))
-# 
+# saveRDS(object = output_xgbdart,file = here("Results","v301_02_xgbd.rds"))
+
 
 # Alternative XGBOOS (xgbTree) --------------------------------------------
 
@@ -123,5 +144,18 @@ output_xgbtree<- caret::train(y = train_y,
                               x = train_x,
                               method = "xgbTree")
 
-saveRDS(object = output_xgbtree,file = here::here("Results","v301_02__tfidf_xgbt.rds"))
+saveRDS(object = output_xgbtree,file = here::here("Results","v301_02_xgbt.RDS"))
+
+xgbt_output<- readRDS(file = here::here("Results","v301_02_xgbt.RDS"))
+
+xgbt_pred<- predict(object = xgbt_output,newdata = testData,type = "raw")
+
+xgbt_conf<- confusionMatrix(xgbt_pred,testData$V301_02)
+
+xgbt_conf_res<- xgbt_conf$byClass
+
+ls() %>%
+  grep(pattern = "_conf_res",x = .,value = T) %>%
+  save(list = .,file = here::here("Results","dfm_shallow_learning_results.Rdata"))
+
 
