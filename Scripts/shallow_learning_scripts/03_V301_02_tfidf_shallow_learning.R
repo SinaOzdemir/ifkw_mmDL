@@ -15,7 +15,7 @@ packs<- c("tidyverse","caret","here")
 
 p_load(char = packs, install = T)
 
-data<- readRDS(file = here("Data","shallow_learning_data","text_tfidf.rds")) %>% 
+data<- readRDS(file = here::here("Data","shallow_learning_data","text_tfidf.rds")) %>% 
   rownames_to_column(var = "doc_id") %>% 
   filter(!(doc_id %in% c("ecb-1202992784652808192","inea_eu-1235481777197604865"))) 
 
@@ -53,6 +53,13 @@ output_nb<- caret::train(y = train_y,
                          method = "naive_bayes")
 
 saveRDS(object = output_nb,file = here("Results","v301_02__tfidf_nb.rds"))
+
+a<- predict(output_nb,testData,type ="raw")
+
+b<- confusionMatrix(data = a,reference = testData$V301_02,positive = "1")
+
+c<-b$byClass
+
 #Something is wrong; all the Accuracy metric values are missing:
 
 
@@ -73,8 +80,8 @@ req_packs<-c("kernlab")
 p_load(char = req_packs,install = T)
 
 
-output_svmpoly<- caret::train(y = train_y,
-                              x = train_x,
+output_svmpoly<- caret::train(V301_02~.,
+                              data = trainData,
                               method = "svmPoly")
 
 
@@ -125,3 +132,26 @@ output_xgbtree<- caret::train(y = train_y,
 
 saveRDS(object = output_xgbtree,file = here::here("Results","v301_02__tfidf_xgbt.rds"))
 
+
+
+# results -----------------------------------------------------------------
+
+results<- list.files(path = here("Results"),pattern = "tfidf",full.names = T)
+model_name<- list.files(path = here("Results"),pattern = "tfidf",full.names = F)
+f1<-function(model_path,test_data,type){
+  model<- readRDS(model_path)
+  model_pred<- predict(model,newdata = test_data, type = type)
+  model_conf<- confusionMatrix(model_pred,reference = test_data$V301_02,positive = "1")
+  model_results<- model_conf$byClass
+  return(model_results)
+}
+
+
+model_results<-list()
+for (i in 1:length(results)) {
+  mf<- f1(model_path = results[i],test_data = testData,type = "raw")
+  model_results[[i]]<-mf
+  names(model_results)[i]<-model_name[i]
+}
+
+save(model_results,file = here::here("Results","tfidf_shallow_learning_results.Rdata"))
