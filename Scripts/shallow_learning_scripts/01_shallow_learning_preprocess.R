@@ -11,41 +11,24 @@
 
 require(pacman)
 
-packs<- c("tidyverse","quanteda","here","fastText","qdapRegex","feather","quanteda.textstats")
+packs<- c("tidyverse","quanteda","here","qdapRegex","feather","quanteda.textstats")
 
 p_load(char = packs,install = T)
 
 labeled_data<- readRDS(file = here("Data","labelled_data","DL_data.RDS")) %>%
   ungroup() %>% select(status_id,screen_name,text,V301_02)
 
-image_texts<- readRDS(file = here("Data","shallow_learning_data","image_texts.rds"))
-
-
 # combine tweet text and image text ---------------------------------------
-
-image_texts<- image_texts %>% 
-  mutate(image_id = str_remove_all(string = image_name,pattern = ".jpg")) %>% 
-  mutate(status_id = str_split(string = image_id,pattern = "-",simplify = T)[,2]) %>% 
-  mutate(screen_name = str_split(string = image_id,pattern = "-",simplify = T)[,1]) %>% 
-  rename(image_text = text) %>% 
-  select(-image_name,-image_id)
-
-sl_data<- left_join(labeled_data,image_texts,by = c("status_id","screen_name"))
-
-sl_data_text<- sl_data %>% 
-  rowwise() %>% 
-  mutate(feature_texts = paste0(text,". ",image_text)) %>% 
-  select(-text,-image_text)
 
 
 # create_doc_id -----------------------------------------------------------
 
-text_data <- sl_data_text %>% 
+text_data <- labeled_data %>% 
+  rename(feature_texts = text) %>% 
   mutate(doc_id = paste0(screen_name,"-",status_id)) %>% #create unique document ids
   select(-status_id,-screen_name) %>% #drop unnecessary variables now
   mutate(feature_texts = str_replace_all(string = feature_texts,pattern = "ı",replacement = "i")) %>% #
   mutate(feature_texts = str_remove_all(string = feature_texts,pattern = "\n")) %>% #remove line breaks from tweets
-  mutate(feature_texts = str_remove_all(string = feature_texts,pattern = "\\p{So}|\\p{Cn}|\U0001f3fb|\U0001f3fc")) %>% #remove emojis from tweets
   mutate(feature_texts = qdapRegex::rm_twitter_url(text.var = feature_texts)) %>%  #remove urls from tweets
   mutate(feature_texts = str_remove_all(string = feature_texts,pattern = " &amp|&amp;|:-&gt;|#|@")) %>% #remove unrecognized characters, mentions and hashtags for language recognition
   mutate(feature_texts = str_remove_all(string = feature_texts, pattern = "[\U{1F1E6}-\U{1F1FF}-\U{1F300}-\U{1F64F}]|[\U{1F300}-\U{1F5FF}]|[\U{1F900}-\U{1F9FF}]|[\U{2700}-\U{27BF}]|[\U{1F100}-\U{1F1FF}]|[\U{2600}-\U{26FF}-\U{2935}]")) %>% 
@@ -53,16 +36,9 @@ text_data <- sl_data_text %>%
   mutate(feature_texts = stringi::stri_trans_nfkc(str = feature_texts)) %>% #normalizes bold and italic characters created with unicode
   mutate(feature_texts = str_replace_all(string = feature_texts,pattern = ":",replacement = ".")) %>% 
   mutate(feature_texts = str_replace_all(string = feature_texts, pattern = "\\.", replacement = ". ")) %>% 
-  drop_na()
+  drop_na() %>% 
+  filter(!duplicated(doc_id))
 
-
-text<- text_data %>% pull(feature_texts)
-
-text_data$text_lang<- fastText::language_identification(input_obj = text,
-                                                        pre_trained_language_model_path = here("lang_recognition","lid.176.bin")) %>% #detect languages
-  pull(iso_lang_1)
-
-text_data<- text_data %>% filter(text_lang == "en") #keep only the english language tweets
 
 label_balance<-as.data.frame(table(text_data$V301_02)) %>% rename(V301_02 = Var1)
 
@@ -87,9 +63,7 @@ text_tokens<- text_corpus %>%
   tokens_select(pattern = stopwords(language = "en",source = "snowball"),
                 selection = "remove",
                 valuetype = "fixed") %>%#remove stop words
-  tokens_select(pattern = "\\<U+",selection = "remove",valuetype = "regex") %>% 
   tokens_select(pattern = "na|i|it",selection = "remove",valuetype = "regex") %>% #remove frequent noises
-  #tokens_select(pattern = "\\X",selection = "remove",valuetype = "regex") %>% 
   tokens_wordstem(language = "en") %>% #stem words
   tokens_tolower() #decapitalize everything
 

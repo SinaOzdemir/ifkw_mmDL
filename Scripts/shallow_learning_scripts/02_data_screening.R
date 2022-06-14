@@ -25,7 +25,8 @@ predictor_variables<- readRDS(file = here("Data","shallow_learning_data","hot_en
 outcome_variables<- outcome_variables %>% 
   ungroup() %>% 
   mutate(doc_id = paste0(screen_name,"-",status_id)) %>% 
-  select(doc_id,V301_02) %>% 
+  select(doc_id,V301_02) %>%
+  filter(!duplicated(doc_id)) %>% 
   drop_na()
 
 predictor_variables<- predictor_variables %>% 

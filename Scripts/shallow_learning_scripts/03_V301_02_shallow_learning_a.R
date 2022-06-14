@@ -29,9 +29,9 @@ trainIndex<- createDataPartition(y = as.factor(data$V301_02),#when y is factor, 
 trainData<- data[trainIndex,]
 testData<- data[-trainIndex,]
 
-#roughly balanced outcomes 0:304, 1:360
+#roughly balanced outcomes 0:360 , 1:396 
 table(trainData$V301_02)
-#same as above 0:75, 1:89
+#same as above 0:90 , 1:99 
 table(testData$V301_02)
 
 train_x<- trainData %>% select(-V301_02) %>% mutate(across(everything(),~as.numeric(.x)))
@@ -43,29 +43,31 @@ req_pack<- c("naivebayes")
 p_load(char = req_pack,install = T)
 output_nb<- caret::train(y = train_y,
                          x = train_x,
+                         metric = "Accuracy",
+                         maximize = T,
                          method = "naive_bayes")
 
-saveRDS(object = output_nb,file = here("Results","v301_02_nb.rds"))
+saveRDS(object = output_nb,file = here::here("Results","v301_02_nb.RDS"))
 
-nb_predict<- readRDS(here::here("Results","v301_02_nb.rds"))
 
-nb_pred_res<- predict(nb_predict,newdata = testData,type = "raw")
+nb_pred_res<- predict(output_nb,newdata = testData,type = "raw")
 
 nb_conf_mat<- confusionMatrix(data= nb_pred_res,reference=testData$V301_02, positive = "1")
 
 nb_conf_res<-nb_conf_mat$byClass
 
+
 # logistic regression -----------------------------------------------------
 
 output_logreg<- caret::train(y = train_y,
                          x = train_x,
+                         metric = "Accuracy",
+                         maximize = T,
                          method = "glmnet")
 
-saveRDS(object = output_logreg,file = here("Results","v301_02_logreg.rds"))
+saveRDS(object = output_logreg,file = here::here("Results","v301_02_logreg.RDS"))
 
-lr_predict<- readRDS(here::here("Results","v301_02_logreg.rds"))
-
-lr_pred_res<- predict(lr_predict,newdata = testData,type = "raw")
+lr_pred_res<- predict(output_logreg,newdata = testData,type = "raw")
 
 lr_conf_mat<- confusionMatrix(data = lr_pred_res,reference = testData$V301_02,positive = "1")
 
@@ -84,13 +86,12 @@ levels(trainData$V301_02)<-c("No","Yes")
 
 output_svmpoly<- caret::train(V301_02~.,
                               data= trainData,
+                              metric = "Accuracy",
+                              maximize = T,
                              method = "svmPoly")
 
 
-
-saveRDS(object = output_svmpoly,file = here("Results","v301_02_poly.rds"))
-
-output_svmpoly<- readRDS(file = here::here("Results","v301_02_poly.rds"))
+saveRDS(object = output_svmpoly,file = here::here("Results","v301_02_svmPoly.RDS"))
 
 svmpoly_pred<- predict(object = output_svmpoly,newdata = testData,type = "raw")
 
@@ -106,32 +107,21 @@ req_packs<-c("e1071", "ranger")
 p_load(char = req_packs,install = T)
 
 output_rf<- caret::train(y = train_y,
-                             x = train_x,
-                             method = "ranger")
+                         x = train_x,
+                         metric = "Accuracy",
+                         maximize = T,
+                         method = "ranger")
 
 saveRDS(object = output_rf,file = here("Results","v301_02_RF.rds"))
 
-rf_output<-readRDS(file = here::here("Results","v301_02_RF.rds"))
 
-rf_pred<- predict(object = rf_output,newdata = testData,type = "raw")
+rf_pred<- predict(object = output_rf,newdata = testData,type = "raw")
+
 levels(testData$V301_02)<-c("0","1")
+
 rf_conf_mat<- confusionMatrix(data = rf_pred,reference = testData$V301_02,positive = "1")
 
 rf_conf_res<- rf_conf_mat$byClass
-
-# XGboost(DART boosting: https://xgboost.readthedocs.io/en/stable/tutorials/dart.html) -----------------------------------------------------------------
-# 
-# 
-# req_packs<-c("xgboost", "plyr")
-# 
-# p_load(char = req_packs,install = T)
-# 
-# output_xgbdart<- caret::train(y = train_y,
-#                          x = train_x,
-#                          method = "xgbDART")
-# 
-# saveRDS(object = output_xgbdart,file = here("Results","v301_02_xgbd.rds"))
-
 
 # Alternative XGBOOS (xgbTree) --------------------------------------------
 
@@ -142,13 +132,13 @@ p_load(char = req_packs,install = T)
 
 output_xgbtree<- caret::train(y = train_y,
                               x = train_x,
+                              metric = "Accuracy",
+                              maximize = T,
                               method = "xgbTree")
 
 saveRDS(object = output_xgbtree,file = here::here("Results","v301_02_xgbt.RDS"))
 
-xgbt_output<- readRDS(file = here::here("Results","v301_02_xgbt.RDS"))
-
-xgbt_pred<- predict(object = xgbt_output,newdata = testData,type = "raw")
+xgbt_pred<- predict(object = output_xgbtree,newdata = testData,type = "raw")
 
 xgbt_conf<- confusionMatrix(xgbt_pred,testData$V301_02)
 
