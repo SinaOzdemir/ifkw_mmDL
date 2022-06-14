@@ -26,6 +26,7 @@ dt<- readRDS(file = here("Data","labelled_data","DL_data.RDS")) %>%
 
 
 text<- dt %>% pull(text)
+
 tweet_lang<-vector(mode = "character",length = length(text))
 
 for(i in 1:length(text)){
@@ -45,7 +46,7 @@ dt<-dt %>% filter(lang == "en")
 # image scraper -----------------------------------------------------------
 
 for (i in 1:nrow(dt)) {
-  img_url<- pull(dt[i,"media_url"])
+  img_url<- dt[i,"media_url"]
   img_ext<- tail(unlist(str_split(string = dt[i,"media_url"],pattern = "\\.",simplify = F)),n=1)
   img_name<- paste0(dt[i,"status_id"],".",img_ext)
   img_path<- paste(data_dest,img_name,sep = "/")
@@ -53,7 +54,9 @@ for (i in 1:nrow(dt)) {
   img<- image_read(img_url)
   
   if(!is.null(img)){
-    download.file(url = img_url,destfile = img_path,mode = "wb")}else{
+    download.file(url = img_url,destfile = img_path,mode = "wb")
+    Sys.sleep(20)}
+  else{
       next
     }
   
@@ -62,5 +65,9 @@ for (i in 1:nrow(dt)) {
 image_list<- list.files(path = here("Data","image_data"),all.files = T,no.. = T)  %>% gsub(pattern = ".jpg|.png",replacement = "",x = .)
 
 dt_final<- dt %>% filter(status_id%in%image_list)
+
+dt_final<- dt_final %>% 
+  mutate(text = qdapRegex::rm_twitter_url(text.var = text,clean = T)) %>% 
+  filter(!duplicated(status_id))
 
 write_feather(x = dt_final,path = here("Data","labelled_data","DL_data.feather"))
